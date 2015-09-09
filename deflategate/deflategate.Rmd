@@ -1,0 +1,126 @@
+---
+title: "Deflategate"
+author: "Moises Evangelista"
+date: "Wednesday, May 13, 2015"
+output: pdf_document
+---
+
+This is an text analysis of the 'Deflategate' report where is accused of deflating balls to have an game advantage see http://en.wikipedia.org/wiki/Deflategate
+
+```{r set workspace}
+rm(list=ls(all=TRUE)) #start with empty workspace
+startTime <- Sys.time()
+
+library(knitr)
+opts_chunk$set(echo = TRUE, cache= TRUE, results = 'hold', warning=FALSE, message=FALSE )
+
+```
+
+```{r import data}
+
+setInternet2(TRUE) 
+
+url <- "https://nfllabor.files.wordpress.com/2015/05/investigative-and-expert-reports-re-footballs-used-during-afc-championsh.pdf"
+
+dest <- tempfile(fileext = ".pdf")
+download.file(url, dest, mode = "wb")
+
+# set path to pdftotxt.exe and convert pdf to text
+exe <- "C:\\Program Files\\xpdfbin-win-3.04\\bin32\\pdftotext.exe"
+system(paste("\"", exe, "\" \"", dest, "\"", sep = ""), wait = F)
+
+# get txt-file name and open it  
+filetxt <- sub(".pdf", ".txt", dest)
+#shell.exec(filetxt)
+
+```
+
+```{r do something with it}
+
+doInstall <- FALSE # Change to TRUE if you do want packages installed.
+toInstall <- c("tm", "wordcloud", "Rstem","koRpus", "xtable")
+if(doInstall){install.packages(toInstall, repos = "http://cran.us.r-project.org")}
+lapply(toInstall, library, character.only = TRUE)
+
+txt <- readLines(filetxt) # 
+
+txt <- tolower(txt)
+# get readibilty stats
+
+tagged.text <- tokenize(filetxt, lang="en")
+str(describe(tagged.text))
+
+hyph.txt.en <- hyphen(tagged.text, quiet = TRUE)
+
+readbl.txt <- readability(tagged.text, hyphen=hyph.txt.en, index="all")
+
+dfReadTxt <- as.data.frame(summary(readbl.txt))
+
+(method.Type <- dfReadTxt[18,1])
+
+(method.Grade <- dfReadTxt[18,4])
+
+(method.Age <- dfReadTxt[18,5])
+
+corpus <- Corpus(VectorSource(txt))
+corpus <- tm_map(corpus, removePunctuation)
+corpus <- tm_map(corpus, removeNumbers)
+corpus <- tm_map(corpus, removeWords, stopwords ("english"))
+#corpus <- tm_map(corpus, removeWords, c("year", "attachment"))
+corpus <- tm_map(corpus, stripWhitespace)
+tdm <- TermDocumentMatrix(corpus)
+m <- as.matrix(tdm)
+d <- data.frame(freq = sort(rowSums(m), decreasing = TRUE))
+
+# find frequent terms
+(findFreqTerms(tdm, lowfreq = 14 ))
+
+# following plot idea is from here 
+#  http://stackoverflow.com/questions/23766124/colors-and-a-plotting-term-document-matrix
+
+freqterms <- findFreqTerms(tdm, lowfreq = 14)[1:28]
+
+vtxcnt <- rowSums(cor(as.matrix(t(tdm[freqterms,])))>.3)-1
+
+mycols<-c("#f7fbff","#deebf7","#c6dbef",
+    "#9ecae1","#6baed6","#4292c6",
+    "#2171b5", "#084594")
+vc <- mycols[vtxcnt+1]
+names(vc) <- names(vtxcnt)
+```
+
+```{r plot, fig.width=10, fig.height=10, fig.cap= "Plot of correlation terms"}
+plot(tdm,terms = findFreqTerms(tdm, lowfreq = 14)[1:28], corThreshold=0.3, nodeAttrs=list(fillcolor=vc))
+
+```
+```{r}
+# Stem words
+d$stem <- wordStem(row.names(d), language = "english")
+
+# and put words to column, otherwise they would be lost when aggregating
+d$word <- row.names(d)
+
+# remove web address (very long string):
+d <- d[nchar(row.names(d)) < 20, ]
+
+# aggregate freqeuncy by word stem and
+# keep first words..
+agg_freq <- aggregate(freq ~ stem, data = d, sum)
+(agg_word <- aggregate(word ~ stem, data = d, function(x) x[1]))
+
+d <- cbind(freq = agg_freq[, 2], agg_word)
+
+# sort by frequency
+d <- d[order(d$freq, decreasing = T), ]
+
+# print wordcloud:
+set.seed(123) # to make it reproducible
+wordcloud(d$word, d$freq, min.freq=5, random.order=F,
+ scale = c (5 , .1), colors =brewer.pal ( 6 , "Dark2"))
+
+```
+
+```{r cache=FALSE}
+endTime <- Sys.time()
+```
+The analysis was completed on `r format(Sys.time(), "%a %b %d %X %Y")` in `r round(difftime(endTime, startTime , units = c( "secs")),0)` seconds.

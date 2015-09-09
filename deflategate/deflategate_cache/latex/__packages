@@ -1,0 +1,11 @@
+base
+knitr
+NLP
+tm
+RColorBrewer
+wordcloud
+Rstem
+koRpus
+xtable
+graph
+Rgraphviz
